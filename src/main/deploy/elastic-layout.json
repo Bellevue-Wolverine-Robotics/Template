@@ -1,0 +1,15 @@
+{
+  "version": 1.0,
+  "grid_size": 64,
+  "tabs": [
+    {
+    },
+    {
+      "name": "Autonomous",
+      "grid_layout": {
+        "layouts": [],
+        "containers": []
+      }
+    }
+  ]
+}

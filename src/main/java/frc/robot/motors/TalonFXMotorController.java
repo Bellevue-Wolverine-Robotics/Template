@@ -21,8 +21,8 @@ public class TalonFXMotorController implements MotorController {
     private final TalonFX motor;
     private final TalonFXConfiguration config = new TalonFXConfiguration();
 
-    public TalonFXMotorController(int id, CANBus bus) {
-        motor = new TalonFX(id, bus);
+    public TalonFXMotorController(int id, String bus) {
+        motor = new TalonFX(id, new CANBus(bus));
     }
 
     @Override

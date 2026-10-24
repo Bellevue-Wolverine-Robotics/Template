@@ -42,26 +42,26 @@ public class VisionSubsystem extends SubsystemBase {
 
         /**
          * Adds the camera to a vision simulation.
-         * 
+         *
          * @param visionSim The photonvision system simulation.
          */
         public void setupSimulation(VisionSystemSim visionSim) {
             SimCameraProperties cameraProp = new SimCameraProperties();
 
             cameraProp.setCalibration(
-                VisionConstants.CAMERA_RESOLUTION_WIDTH,
-                VisionConstants.CAMERA_RESOLUTION_HEIGHT,
-                Rotation2d.fromDegrees(VisionConstants.CAMERA_DIAGONAL_FOV)
+                VisionConstants.SIMULATION_CAMERA_RESOLUTION_WIDTH,
+                VisionConstants.SIMULATION_CAMERA_RESOLUTION_HEIGHT,
+                Rotation2d.fromDegrees(VisionConstants.SIMULATION_CAMERA_DIAGONAL_FOV)
             );
 
             cameraProp.setCalibError(
-                VisionConstants.CAMERA_AVERAGE_ERROR_PIXEL,
-                VisionConstants.CAMERA_ERROR_STD_DEV_PIXEL
+                VisionConstants.SIMULATION_CAMERA_AVERAGE_ERROR_PIXEL,
+                VisionConstants.SIMULATION_CAMERA_ERROR_STD_DEV_PIXEL
             );
 
-            cameraProp.setFPS(VisionConstants.CAMERA_FPS);
-            cameraProp.setAvgLatencyMs(VisionConstants.CAMERA_LATENCY_MS);
-            cameraProp.setLatencyStdDevMs(VisionConstants.CAMERA_LATENCY_STD_DEV_MS);
+            cameraProp.setFPS(VisionConstants.SIMULATION_CAMERA_FPS);
+            cameraProp.setAvgLatencyMs(VisionConstants.SIMULATION_CAMERA_LATENCY_MS);
+            cameraProp.setLatencyStdDevMs(VisionConstants.SIMULATION_CAMERA_LATENCY_STD_DEV_MS);
 
             cameraSim = new PhotonCameraSim(photonCamera, cameraProp);
             visionSim.addCamera(cameraSim, properties.robotToCamera);
@@ -72,7 +72,7 @@ public class VisionSubsystem extends SubsystemBase {
          * Attempts to estimate a pose of the robot from the camera.
          * No estimate will be provided if there are no unread frames,
          * or if the latest frame has no april tags.
-         * 
+         *
          * @return The estimated pose of the robot, if available.
          */
         public Optional<PoseEstimate> estimatePose() {
@@ -92,7 +92,6 @@ public class VisionSubsystem extends SubsystemBase {
                     return Optional.empty();
                 }
             }
-
 
             Matrix<N3, N1> stdDevs = calculateEstimationStdDevs(estimatedPose.get(), result.getTargets());
             return Optional.of(new PoseEstimate(
@@ -114,41 +113,42 @@ public class VisionSubsystem extends SubsystemBase {
             EstimatedRobotPose estimatedPose,
             List<PhotonTrackedTarget> targets
         ) {
-            var estStdDevs = VisionConstants.SINGLE_TAG_STD_DEVS;
-            int numTags = 0;
-            double avgDist = 0;
+            double totalDistance = 0;
+            int count = 0;
 
-            // Precalculation - see how many tags we found, and calculate an average-distance metric
-            for (var tgt : targets) {
-                Optional<Pose3d> tagPose = photonPoseEstimator.getFieldTags().getTagPose(tgt.getFiducialId());
+            for (PhotonTrackedTarget target : targets) {
+                Optional<Pose3d> tagPose = photonPoseEstimator.getFieldTags().getTagPose(
+                    target.getFiducialId()
+                );
+
                 if (tagPose.isEmpty()) {
                     continue;
                 }
-                numTags++;
-                avgDist += tagPose.get().toPose2d().getTranslation().getDistance(
+
+                count += 1;
+                totalDistance += tagPose.get().toPose2d().getTranslation().getDistance(
                     estimatedPose.estimatedPose.toPose2d().getTranslation()
                 );
             }
 
-            if (numTags == 0) {
-                return estStdDevs;
-            }
 
-            // One or more tags visible, run the full heuristic.
-            avgDist /= numTags;
-            // Decrease std devs if multiple targets are visible
-            if (numTags > 1) {
-                estStdDevs = VisionConstants.MULTI_TAG_STD_DEVS;
-            }
-            // Increase std devs based on (average) distance
-            if (numTags == 1 && avgDist > VisionConstants.SINGLE_TAG_DISTANCE_THRESHOLD.in(Meters)) {
-                estStdDevs = VecBuilder.fill(Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
-            }
-            else {
-                estStdDevs = estStdDevs.times(1 + (avgDist * avgDist / VisionConstants.STD_DEVS_SCALING_FACTOR));
-            };
+            double averageDistance = totalDistance / count;
 
-            return estStdDevs;
+            if (count == 0) {
+                return VecBuilder.fill(Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
+            }
+            else if (count == 1) {
+                if (
+                    averageDistance < VisionConstants.SINGLE_TAG_DISTANCE_THRESHOLD.in(Meters)
+                    || targets.get(0).getPoseAmbiguity() > VisionConstants.SINGLE_TAG_AMBIGUITY_THRESHOLD
+                ) {
+                    return VecBuilder.fill(Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
+                } else {
+                    return VisionConstants.SINGLE_TAG_STD_DEVS.compute(averageDistance, count);
+                }
+            } else {
+                return VisionConstants.MULTI_TAG_STD_DEVS.compute(averageDistance, count);
+            }
         }
     }
 
@@ -185,8 +185,8 @@ public class VisionSubsystem extends SubsystemBase {
     /**
      * Provides the pose estimates from all cameras with new pose estimates.
      * For a camera to be included, it must have unread frames, and
-     * the latest frame must contain at least one april tag. 
-     * 
+     * the latest frame must contain at least one april tag.
+     *
      * @return
      */
     public List<PoseEstimate> getEstimates() {
@@ -202,7 +202,7 @@ public class VisionSubsystem extends SubsystemBase {
 
     /**
      * Updates the camera positions with the simulated drivetrain position.
-     * 
+     *
      * @param pose The simulated drivetrain position.
      */
     public void updateSimulation(Pose2d pose) {

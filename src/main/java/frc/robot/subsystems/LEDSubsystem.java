@@ -9,26 +9,22 @@ import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.constants.LEDConstants;
 import static edu.wpi.first.units.Units.Seconds;
 
+import edu.wpi.first.epilogue.Logged;
+
 public class LEDSubsystem extends SubsystemBase {
     private final AddressableLED led;
     private final AddressableLEDBuffer ledBuffer;
 
-    private boolean inRange = false;
+    @Logged(name="Aligning")
     private boolean aligning = false;
-    private LEDPattern basePattern;
 
     public LEDSubsystem() {
         led = new AddressableLED(LEDConstants.PWM_PORT);
-
         ledBuffer = new AddressableLEDBuffer(LEDConstants.LENGTH);
+
         led.setLength(ledBuffer.getLength());
         led.setData(ledBuffer);
-
         led.start();
-    }
-
-    public void setInRange(boolean inRange) {
-        this.inRange = inRange;
     }
 
     public void setAligning(boolean aligning) {
@@ -53,11 +49,7 @@ public class LEDSubsystem extends SubsystemBase {
             return;
         }
 
-        if (inRange) {
-            basePattern = LEDPattern.solid(Color.kGreen);
-        } else {
-            basePattern = LEDPattern.solid(Color.kRed);
-        }
+        LEDPattern basePattern = LEDPattern.solid(Color.kGreen);
 
         if (aligning) {
             setPattern(basePattern.blink(Seconds.of(0.5)));

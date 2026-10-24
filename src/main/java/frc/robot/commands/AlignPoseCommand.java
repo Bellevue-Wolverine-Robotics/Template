@@ -45,6 +45,11 @@ public class AlignPoseCommand extends Command {
         )
     );
 
+    private final TrajectoryConfig trajectoryConfig = new TrajectoryConfig(
+        AlignmentConstants.MAXIMUM_TRANSLATIONAL_VELOCITY,
+        AlignmentConstants.MAXIMUM_TRANSLATIONAL_ACCELERATION
+        );
+
     private final Timer timer = new Timer();
     private final SwerveSubsystem swerveSubsystem;
     private final LEDSubsystem ledSubsystem;
@@ -53,7 +58,7 @@ public class AlignPoseCommand extends Command {
 
     /**
      * Constructs a new AlignPoseCommand
-     * 
+     *
      * @param swerveSubsystem The swerve subsystem.
      * @param ledSubsystem The LED subsystem.
      * @param target The target position to drive to.
@@ -67,39 +72,56 @@ public class AlignPoseCommand extends Command {
         this.ledSubsystem = ledSubsystem;
         this.target = target;
 
-        controller.setTolerance(AlignmentConstants.TOLERANCE);
+        controller.setTolerance(AlignmentConstants.POSITION_TOLERANCE);
         addRequirements(swerveSubsystem);
     }
 
     @Override
     public void initialize() {
-        ChassisSpeeds chassisSpeeds = swerveSubsystem.getVelocity();
+        ChassisSpeeds currentVelocity = swerveSubsystem.getVelocity();
+        Pose2d currentPosition = swerveSubsystem.getPosition();
+        Pose2d targetPosition = target.get();
 
-        Pose2d current = new Pose2d(
-            swerveSubsystem.getPose().getTranslation(),
-            new Rotation2d(chassisSpeeds.vxMetersPerSecond, chassisSpeeds.vyMetersPerSecond)
-        );
+        if (currentPosition.getTranslation().getDistance(targetPosition.getTranslation()) > AlignmentConstants.MINIMUM_TRAJECTORY_DISTANCE.in(Meters)) {
+            double velocityMagnitute = Math.hypot(
+                currentVelocity.vxMetersPerSecond,
+                currentVelocity.vyMetersPerSecond
+            );
 
-        double distance = current.getTranslation().getDistance(current.getTranslation());
+            Rotation2d endHeading = targetPosition.getTranslation().minus(currentPosition.getTranslation()).getAngle();
+            Rotation2d startHeading;
 
-        TrajectoryConfig trajectoryConfig = new TrajectoryConfig(
-            AlignmentConstants.MAXIMUM_ANGULAR_VELOCITY.in(RadiansPerSecond),
-            AlignmentConstants.MAXIMUM_ANGULAR_ACCELERATION.in(RadiansPerSecondPerSecond)
-        );
+            if (velocityMagnitute < AlignmentConstants.STARTING_VELOCITY_TOLERANCE.in(MetersPerSecond)) {
+                startHeading = endHeading;
+            } else {
+                startHeading = new Rotation2d(currentVelocity.vxMetersPerSecond, currentVelocity.vyMetersPerSecond);
+            }
 
-        trajectoryConfig.setStartVelocity(Math.min(
-            swerveSubsystem.getTranslationalVelocity().in(MetersPerSecond),
-            Math.sqrt(2 * AlignmentConstants.MAXIMUM_LINEAR_ACCELERATION.in(MetersPerSecondPerSecond) * distance)
-        ));
+            Pose2d startPosition = new Pose2d(
+                currentPosition.getTranslation(),
+                startHeading
+            );
 
-        trajectory = TrajectoryGenerator.generateTrajectory(
-            List.of(current, target.get()),
-            trajectoryConfig
-        );
+            Pose2d endPosition = new Pose2d(
+                targetPosition.getTranslation(),
+                endHeading
+            );
+
+            trajectoryConfig.setStartVelocity(velocityMagnitute);
+
+            trajectory = TrajectoryGenerator.generateTrajectory(
+                List.of(startPosition, endPosition),
+                trajectoryConfig
+            );
+        } else {
+            trajectory = new Trajectory(List.of(
+                new Trajectory.State(0.0, 0.0, 0.0, targetPosition, 0.0)
+            ));
+        }
 
         controller.getThetaController().reset(
-            swerveSubsystem.getPose().getRotation().getRadians(),
-            swerveSubsystem.getRotationalVelocity().in(RadiansPerSecond)
+            swerveSubsystem.getPosition().getRotation().getRadians(),
+            currentVelocity.omegaRadiansPerSecond
         );
 
         timer.restart();
@@ -110,13 +132,13 @@ public class AlignPoseCommand extends Command {
 
     @Override
     public void execute() {
-        Pose2d current = swerveSubsystem.getPose();
+        Pose2d current = swerveSubsystem.getPosition();
         ChassisSpeeds chassisSpeeds = controller.calculate(
             current,
             trajectory.sample(timer.get()),
             target.get().getRotation()
         );
-        swerveSubsystem.drive(chassisSpeeds);
+        swerveSubsystem.driveRobotCentric(chassisSpeeds);
     }
 
     @Override

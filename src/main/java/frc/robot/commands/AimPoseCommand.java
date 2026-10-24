@@ -6,6 +6,7 @@ import java.util.function.Supplier;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.constants.AimingConstants;
 import frc.robot.subsystems.LEDSubsystem;
@@ -23,30 +24,30 @@ public class AimPoseCommand extends Command {
     private final SwerveSubsystem swerveSubsystem;
     private final LEDSubsystem ledSubsystem;
     private final Supplier<Pose2d> target;
-    private final DoubleSupplier xAxis;
-    private final DoubleSupplier yAxis;
+    private final DoubleSupplier x;
+    private final DoubleSupplier y;
 
     /**
      * Constructs a new AimPoseCommand.
-     * 
+     *
      * @param swerveSubsystem The swerve subsystem.
      * @param ledSubsystem The LED subsystem.
      * @param target The target to point.
-     * @param xAxis Supplier of the X axis value on the driving joystick.
-     * @param yAxis Supplier of the Y axis value on the driving joystick.
+     * @param x Supplier of the X axis value on the driving joystick.
+     * @param y Supplier of the Y axis value on the driving joystick.
      */
     public AimPoseCommand(
         SwerveSubsystem swerveSubsystem,
         LEDSubsystem ledSubsystem,
         Supplier<Pose2d> target,
-        DoubleSupplier xAxis,
-        DoubleSupplier yAxis
+        DoubleSupplier x,
+        DoubleSupplier y
     ) {
         this.swerveSubsystem = swerveSubsystem;
         this.ledSubsystem = ledSubsystem;
         this.target = target;
-        this.xAxis = xAxis;
-        this.yAxis = yAxis;
+        this.x = x;
+        this.y = y;
         addRequirements(swerveSubsystem);
 
         thetaController.setTolerance(AimingConstants.ROTATIONAL_TOLERANCE.in(Radians));
@@ -56,29 +57,29 @@ public class AimPoseCommand extends Command {
     @Override
     public void initialize() {
         thetaController.reset();
+        ledSubsystem.setAligning(true);
     }
 
     @Override
     public void execute() {
-        Pose2d pose = swerveSubsystem.getPose();
+        Pose2d currentPosition = swerveSubsystem.getPosition();
+        Translation2d difference = target.get().getTranslation().minus(currentPosition.getTranslation());
 
-        Translation2d difference = target.get().getTranslation().minus(pose.getTranslation());
-
-        double currentHeading = pose.getRotation().getRadians();
+        double currentHeading = currentPosition.getRotation().getRadians();
         double desiredHeading = difference.getAngle().getRadians();
         double thetaVelocity = thetaController.calculate(currentHeading, desiredHeading);
 
-        if (thetaController.atSetpoint() && xAxis.getAsDouble() == 0 && yAxis.getAsDouble() == 0) {
-            swerveSubsystem.lock();
+        if (thetaController.atSetpoint() && x.getAsDouble() == 0 && y.getAsDouble() == 0) {
+            swerveSubsystem.brake();
         } else {
-            swerveSubsystem.drive(
-                xAxis.getAsDouble(),
-                yAxis.getAsDouble(),
-                thetaVelocity
+            swerveSubsystem.driveFieldCentric(
+                new ChassisSpeeds(
+                    swerveSubsystem.scaleTranslationalDutyCycle(x),
+                    swerveSubsystem.scaleTranslationalDutyCycle(y),
+                    thetaVelocity
+                )
             );
         }
-
-        ledSubsystem.setAligning(!thetaController.atSetpoint());
     }
 
     @Override

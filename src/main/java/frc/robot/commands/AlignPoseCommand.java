@@ -56,13 +56,6 @@ public class AlignPoseCommand extends Command {
     private final Supplier<Pose2d> target;
     private Trajectory trajectory;
 
-    /**
-     * Constructs a new AlignPoseCommand
-     *
-     * @param swerveSubsystem The swerve subsystem.
-     * @param ledSubsystem The LED subsystem.
-     * @param target The target position to drive to.
-     */
     public AlignPoseCommand(
         SwerveSubsystem swerveSubsystem,
         LEDSubsystem ledSubsystem,

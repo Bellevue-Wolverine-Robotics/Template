@@ -27,15 +27,6 @@ public class AimPoseCommand extends Command {
     private final DoubleSupplier x;
     private final DoubleSupplier y;
 
-    /**
-     * Constructs a new AimPoseCommand.
-     *
-     * @param swerveSubsystem The swerve subsystem.
-     * @param ledSubsystem The LED subsystem.
-     * @param target The target to point.
-     * @param x Supplier of the X axis value on the driving joystick.
-     * @param y Supplier of the Y axis value on the driving joystick.
-     */
     public AimPoseCommand(
         SwerveSubsystem swerveSubsystem,
         LEDSubsystem ledSubsystem,
